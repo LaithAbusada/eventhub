@@ -1,0 +1,49 @@
+@api = http://localhost:4000/api
+
+### Register an organizer (note the messy email)
+POST {{api}}/auth/register
+Content-Type: application/json
+
+{ "name": "Test Organizer", "email": "  Me@Example.TEST ", "password": "password123", "role": "organizer" }
+
+### Same email again: expect 409
+POST {{api}}/auth/register
+Content-Type: application/json
+
+{ "name": "Someone", "email": "me@example.test", "password": "password123", "role": "attendee" }
+
+### Bad input: expect 422 with four details
+POST {{api}}/auth/register
+Content-Type: application/json
+
+{ "name": "X", "email": "nope", "password": "short", "role": "admin" }
+
+### Broken JSON: expect 400
+POST {{api}}/auth/login
+Content-Type: application/json
+
+{ "email":
+
+### Log in
+# @name login
+POST {{api}}/auth/login
+Content-Type: application/json
+
+{ "email": "me@example.test", "password": "password123" }
+
+### Wrong password: expect 401
+POST {{api}}/auth/login
+Content-Type: application/json
+
+{ "email": "me@example.test", "password": "not-my-password" }
+
+### Who am I? (send "Log in" first)
+GET {{api}}/auth/me
+Authorization: Bearer {{login.response.body.$.token}}
+
+### No token: expect 401
+GET {{api}}/auth/me
+
+### Fake token: expect 401
+GET {{api}}/auth/me
+Authorization: Bearer abc
