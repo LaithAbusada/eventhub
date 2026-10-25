@@ -27,6 +27,11 @@ export const objectId = z.string().regex(/^[a-f\d]{24}$/i, 'must be a valid id')
 
  export const eventEdit = eventInput.partial();            // every field optional: for PUT
 
+ // A default is fine here: this schema is never used with .partial()
+ export const registrationInput = z.object({
+    ticketCount: z.number().int().min(1).max(10).default(1)
+ })
+
  export const listQuery = z.object({
     page: z.coerce.number().int().min(1).default(1),
     size: z.coerce.number().int().min(1).max(50).default(12)

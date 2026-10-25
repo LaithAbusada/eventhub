@@ -4,8 +4,9 @@ import { Venue } from '../models/Venue.js';
 import { Registration } from '../models/Registration.js';
 import { validateBody, validateQuery } from '../middleware/validate.js';
 import { auth, requireRole } from '../middleware/auth.js';
-import { eventInput, eventEdit, listQuery } from '../schemas.js';
+import { eventInput, eventEdit, listQuery, registrationInput } from '../schemas.js';
 import { buildReturnShape, HttpError } from '../errors.js';
+import { registerForEvent } from '../services/registrations.js';
 
 export const eventRoutes = Router();
 
@@ -86,4 +87,9 @@ eventRoutes.delete('/:id', auth, async (req, res) => {
   await Registration.deleteMany({ event: event._id });
   await event.deleteOne();
   res.status(204).end();
+});
+
+eventRoutes.post('/:id/register', auth, validateBody(registrationInput), async (req, res) => {
+  const registration = await registerForEvent(req.user.sub, req.params.id, req.body.ticketCount);
+  res.status(201).json(registration);
 });
