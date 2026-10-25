@@ -180,3 +180,14 @@ Authorization: Bearer {{org2.response.body.$.token}}
 ### My registrations
 GET {{api}}/me/registrations
 Authorization: Bearer {{att.response.body.$.token}}
+
+### Top venues
+GET {{api}}/stats/top-venues
+
+### My events, as an organizer: expect counts and remaining seats
+GET {{api}}/me/events
+Authorization: Bearer {{org.response.body.$.token}}
+
+### My events, as an attendee: expect 403
+GET {{api}}/me/events
+Authorization: Bearer {{att.response.body.$.token}}
