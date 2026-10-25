@@ -8,6 +8,7 @@ const eventSchema = new mongoose.Schema({
     venue: {type:mongoose.Schema.ObjectId , ref:"Venue" , required:true},
     organizer: {type:mongoose.Schema.ObjectId, ref: "User", required:true},
     categories: {type: [String],default:[]},
+    seatsTaken :{type:Number, min:0 , default:0}
 },{timestamps:true})
 
 eventSchema.index({startsAt:1});

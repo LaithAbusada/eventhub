@@ -47,3 +47,87 @@ GET {{api}}/auth/me
 ### Fake token: expect 401
 GET {{api}}/auth/me
 Authorization: Bearer abc
+
+########## Events and venues (run npm run seed first, then send these top to bottom)
+
+### Log in as the seeded organizer
+# @name org
+POST {{api}}/auth/login
+Content-Type: application/json
+
+{ "email": "organizer@eventhub.test", "password": "password123" }
+
+### Log in as the second organizer
+# @name org2
+POST {{api}}/auth/login
+Content-Type: application/json
+
+{ "email": "organizer2@eventhub.test", "password": "password123" }
+
+### Log in as an attendee
+# @name att
+POST {{api}}/auth/login
+Content-Type: application/json
+
+{ "email": "attendee@eventhub.test", "password": "password123" }
+
+### Upcoming events, page 2, 5 per page
+# @name list
+GET {{api}}/events?page=2&size=5
+
+### One event
+GET {{api}}/events/{{list.response.body.$.items[0]._id}}
+
+### All venues
+# @name venues
+GET {{api}}/venues
+
+### Create an event as an organizer: expect 201
+# @name created
+POST {{api}}/events
+Authorization: Bearer {{org.response.body.$.token}}
+Content-Type: application/json
+
+{ "title": "Test Gig", "description": "Made from REST Client", "startsAt": "2027-01-10T18:00:00Z", "price": 7.5, "venue": "{{venues.response.body.$[0]._id}}", "categories": ["Music", " Food "] }
+
+### The same as an attendee: expect 403
+POST {{api}}/events
+Authorization: Bearer {{att.response.body.$.token}}
+Content-Type: application/json
+
+{ "title": "Nope", "startsAt": "2027-01-10T18:00:00Z", "price": 0, "venue": "{{venues.response.body.$[0]._id}}" }
+
+### Invalid input: expect 422 with four details
+POST {{api}}/events
+Authorization: Bearer {{org.response.body.$.token}}
+Content-Type: application/json
+
+{ "title": "ab", "startsAt": "2000-01-01", "price": -1, "venue": "123" }
+
+### Edit someone else's event: expect 403
+PUT {{api}}/events/{{created.response.body.$._id}}
+Authorization: Bearer {{org2.response.body.$.token}}
+Content-Type: application/json
+
+{ "title": "Hacked" }
+
+### Edit only the title of your own event: expect 200, description unchanged
+PUT {{api}}/events/{{created.response.body.$._id}}
+Authorization: Bearer {{org.response.body.$.token}}
+Content-Type: application/json
+
+{ "title": "Test Gig, renamed" }
+
+### Delete it: expect 204
+DELETE {{api}}/events/{{created.response.body.$._id}}
+Authorization: Bearer {{org.response.body.$.token}}
+
+### Read it again: expect 404
+GET {{api}}/events/{{created.response.body.$._id}}
+
+### A malformed id: expect 404 too
+GET {{api}}/events/not-an-id
+
+### Delete a venue that has upcoming events: expect 409
+DELETE {{api}}/venues/{{venues.response.body.$[0]._id}}
+Authorization: Bearer {{org.response.body.$.token}}
