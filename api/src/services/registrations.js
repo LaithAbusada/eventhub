@@ -2,19 +2,50 @@ import { Event } from '../models/Event.js';
 import { Registration } from '../models/Registration.js';
 import { HttpError } from '../errors.js';
 
-// THE BROKEN VERSION, on purpose: read, check, then write are three separate steps
 export async function registerForEvent(userId, eventId, ticketCount) {
   const event = await Event.findById(eventId).populate('venue', 'capacity');
   if (!event) throw new HttpError(404, "NOT_FOUND", "Event not found");
+  if (event.startsAt < new Date()) {
+    throw new HttpError(409, "EVENT_STARTED", "This event has already started");
+  }
   const venue = /** @type {any} */ (event.venue);
 
-  // Steps 1 and 2: read how many seats are taken, and check there's room
-  if (event.seatsTaken + ticketCount > venue.capacity) {
-    throw new HttpError(409, "EVENT_FULL", "Sorry, there are not enough seats left");
+  // A friendly early answer for the common case. The unique index still guards the rare race
+  // where the same person double-clicks.
+  const existing = await Registration.findOne({ user: userId, event: eventId });
+  if (existing?.status === 'confirmed') {
+    throw new HttpError(409, "ALREADY_REGISTERED", "You are already registered for this event");
   }
 
-  // Step 3: write. Another request can do steps 1 and 2 before this line runs.
-  const registration = await Registration.create({ user: userId, event: eventId, ticketCount });
-  await Event.updateOne({ _id: eventId }, { $inc: { seatsTaken: ticketCount } });
-  return registration;
+  // 1. Claim the seats in ONE atomic step. The filter only matches while there is room for
+  //    ticketCount more, so of two people racing for the last seat, only one update matches.
+  const claimed = await Event.findOneAndUpdate(
+    { _id: eventId, seatsTaken: { $lte: venue.capacity - ticketCount } },
+    { $inc: { seatsTaken: ticketCount } },
+  );
+  if (!claimed) throw new HttpError(409, "EVENT_FULL", "Sorry, there are not enough seats left");
+
+  // 2. Save the registration
+  try {
+    if (existing) {
+      // They cancelled before. The unique index allows one row per user and event, so reuse it.
+      const reactivated = await Registration.findOneAndUpdate(
+        { _id: existing._id, status: 'cancelled' },
+        { status: 'confirmed', ticketCount },
+        { returnDocument: 'after' },
+      );
+      if (!reactivated) {
+        throw new HttpError(409, "ALREADY_REGISTERED", "You are already registered for this event");
+      }
+      return reactivated;
+    }
+    return await Registration.create({ user: userId, event: eventId, ticketCount });
+  } catch (err) {
+    // 3. Saving failed, so give the seats back
+    await Event.updateOne({ _id: eventId }, { $inc: { seatsTaken: -ticketCount } });
+    if (err.code === 11000) {
+      throw new HttpError(409, "ALREADY_REGISTERED", "You are already registered for this event");
+    }
+    throw err;
+  }
 }
