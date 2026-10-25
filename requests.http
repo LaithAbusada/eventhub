@@ -131,3 +131,52 @@ GET {{api}}/events/not-an-id
 ### Delete a venue that has upcoming events: expect 409
 DELETE {{api}}/venues/{{venues.response.body.$[0]._id}}
 Authorization: Bearer {{org.response.body.$.token}}
+
+########## Registrations (send the three logins above and "All venues" first)
+
+### A fresh event to register for
+# @name gig
+POST {{api}}/events
+Authorization: Bearer {{org.response.body.$.token}}
+Content-Type: application/json
+
+{ "title": "Registration Test", "startsAt": "2027-02-01T18:00:00Z", "price": 0, "venue": "{{venues.response.body.$[0]._id}}" }
+
+### Register: expect 201
+# @name reg
+POST {{api}}/events/{{gig.response.body.$._id}}/register
+Authorization: Bearer {{att.response.body.$.token}}
+
+### Register again: expect 409 ALREADY_REGISTERED
+POST {{api}}/events/{{gig.response.body.$._id}}/register
+Authorization: Bearer {{att.response.body.$.token}}
+
+### Cancel: expect 204
+DELETE {{api}}/events/{{gig.response.body.$._id}}/register
+Authorization: Bearer {{att.response.body.$.token}}
+
+### Cancel again: expect 404 NOT_REGISTERED
+DELETE {{api}}/events/{{gig.response.body.$._id}}/register
+Authorization: Bearer {{att.response.body.$.token}}
+
+### Register again with 3 tickets: expect 201 and the same _id as before
+POST {{api}}/events/{{gig.response.body.$._id}}/register
+Authorization: Bearer {{att.response.body.$.token}}
+Content-Type: application/json
+
+{ "ticketCount": 3 }
+
+### Seats left went down by 3
+GET {{api}}/events/{{gig.response.body.$._id}}
+
+### Attendees, as the owner: expect the attendee with name and email
+GET {{api}}/events/{{gig.response.body.$._id}}/attendees
+Authorization: Bearer {{org.response.body.$.token}}
+
+### Attendees, as another organizer: expect 403
+GET {{api}}/events/{{gig.response.body.$._id}}/attendees
+Authorization: Bearer {{org2.response.body.$.token}}
+
+### My registrations
+GET {{api}}/me/registrations
+Authorization: Bearer {{att.response.body.$.token}}

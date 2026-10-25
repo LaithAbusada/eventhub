@@ -49,3 +49,16 @@ export async function registerForEvent(userId, eventId, ticketCount) {
     throw err;
   }
 }
+
+export async function cancelRegistration(userId, eventId) {
+  // Flip confirmed to cancelled in ONE step, with the status in the filter. A double click finds
+  // nothing the second time, so the seats are only given back once.
+  const registration = await Registration.findOneAndUpdate(
+    { user: userId, event: eventId, status: 'confirmed' },
+    { status: 'cancelled' },
+  );
+  if (!registration) {
+    throw new HttpError(404, "NOT_REGISTERED", "You have no active registration for this event");
+  }
+  await Event.updateOne({ _id: eventId }, { $inc: { seatsTaken: -registration.ticketCount } });
+}

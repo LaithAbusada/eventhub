@@ -6,7 +6,7 @@ import { validateBody, validateQuery } from '../middleware/validate.js';
 import { auth, requireRole } from '../middleware/auth.js';
 import { eventInput, eventEdit, listQuery, registrationInput } from '../schemas.js';
 import { buildReturnShape, HttpError } from '../errors.js';
-import { registerForEvent } from '../services/registrations.js';
+import { registerForEvent, cancelRegistration } from '../services/registrations.js';
 
 export const eventRoutes = Router();
 
@@ -92,4 +92,18 @@ eventRoutes.delete('/:id', auth, async (req, res) => {
 eventRoutes.post('/:id/register', auth, validateBody(registrationInput), async (req, res) => {
   const registration = await registerForEvent(req.user.sub, req.params.id, req.body.ticketCount);
   res.status(201).json(registration);
+});
+
+eventRoutes.delete('/:id/register', auth, async (req, res) => {
+  await cancelRegistration(req.user.sub, req.params.id);
+  res.status(204).end();
+});
+
+// Only the event's owner sees who is coming
+eventRoutes.get('/:id/attendees', auth, async (req, res) => {
+  const event = await loadOwnedEvent(req);
+  const attendees = await Registration.find({ event: event._id, status: 'confirmed' })
+    .sort({ createdAt: 1 })
+    .populate('user', 'name email');
+  res.json(attendees);
 });
