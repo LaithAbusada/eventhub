@@ -7,6 +7,8 @@ import { User } from '../src/models/User.js';
 import { Venue } from '../src/models/Venue.js';
 import { Event } from '../src/models/Event.js';
 import { Registration } from '../src/models/Registration.js';
+import { es } from '../src/db/elastic.js';
+import { rebuildIndex } from '../src/services/search.js';
 
 const PASSWORD = 'password123';
 const DAY = 24 * 60 * 60 * 1000;
@@ -126,4 +128,14 @@ for (const event of events) {
 
 console.log(`Created 4 users, ${venues.length} venues, ${events.length} events, ${registrations.length} registrations`);
 console.log(`Test logins: organizer@eventhub.test and attendee@eventhub.test, password ${PASSWORD}`);
+
+// Search gets the same fresh events. The seed still counts as done if Elasticsearch is down.
+try {
+  const indexedCount = await rebuildIndex();
+  console.log(`Search index rebuilt with ${indexedCount} events`);
+} catch (e) {
+  console.warn(`Could not rebuild the search index (${e.message || e.name}). Once Elasticsearch is up, run: npm run reindex`);
+}
+
 await mongoose.disconnect();
+await es.close();
