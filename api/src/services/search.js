@@ -1,4 +1,5 @@
 import { es, EVENTS_INDEX, eventsIndexDefinition, searchStatus } from "../db/elastic.js";
+import { HttpError } from "../errors.js";
 import { Event } from "../models/Event.js";
 // Not used by name, but populate('venue') needs Mongoose to know the Venue model.
 // Without this import, any script that calls rebuildIndex on its own crashes with MissingSchemaError.
@@ -109,4 +110,132 @@ export async function removeEvent(eventId) {
   } catch (e) {
     console.error(`Could not remove event ${eventId} from search: ${e.message || e.name}`);
   }
+}
+
+const SEARCH_UNAVAILABLE_MESSAGE = "Search is unavailable right now. Try again in a minute.";
+
+function buildTextQuery(q) {
+  if (!q) {
+    return { match_all: {} };
+  }
+
+  return {
+    multi_match: {
+      query: q,
+      fields: ["title^3", "description"],
+      fuzziness: "AUTO",
+    },
+  };
+}
+
+function buildFilters(params) {
+  const filters = [];
+
+  // "now/d" is the start of today, so events from earlier today still show
+  filters.push({ range: { startsAt: { gte: "now/d" } } });
+
+  if (params.city) {
+    filters.push({ term: { city: params.city } });
+  }
+
+  if (params.category) {
+    filters.push({ term: { categories: params.category } });
+  }
+
+  if (params.from) {
+    filters.push({ range: { startsAt: { gte: params.from } } });
+  }
+
+  if (params.to) {
+    // "||/d" rounds up to the end of that day, so the whole "to" day is included
+    filters.push({ range: { startsAt: { lte: `${params.to}||/d` } } });
+  }
+
+  // !== undefined because 0 is a real price (maxPrice=0 means free events only)
+  if (params.minPrice !== undefined) {
+    filters.push({ range: { price: { gte: params.minPrice } } });
+  }
+
+  if (params.maxPrice !== undefined) {
+    filters.push({ range: { price: { lte: params.maxPrice } } });
+  }
+
+  return filters;
+}
+
+/** @returns {import('@elastic/elasticsearch').estypes.Sort} */
+function buildSortOrder(sort) {
+  if (sort === "soonest") {
+    return [{ startsAt: "asc" }];
+  }
+
+  if (sort === "cheapest") {
+    return [{ price: "asc" }, { startsAt: "asc" }];
+  }
+
+  // relevance. The client's types want the long { order } form for _score.
+  return [{ _score: { order: "desc" } }, { startsAt: "asc" }];
+}
+
+export async function searchEvents(params) {
+  if (!searchStatus.ready) {
+    throw new HttpError(503, "SEARCH_UNAVAILABLE", SEARCH_UNAVAILABLE_MESSAGE);
+  }
+
+  const textQuery = buildTextQuery(params.q);
+  const filters = buildFilters(params);
+  const sortOrder = buildSortOrder(params.sort);
+  const skip = (params.page - 1) * params.size;
+
+  let response;
+  try {
+    response = await es.search({
+      index: EVENTS_INDEX,
+      from: skip,
+      size: params.size,
+      track_total_hits: true,
+      query: {
+        bool: {
+          must: [textQuery],
+          filter: filters,
+        },
+      },
+      sort: sortOrder,
+      highlight: {
+        // Escapes the organizer's own text, so only our <mark> tags are real HTML
+        encoder: "html",
+        pre_tags: ["<mark>"],
+        post_tags: ["</mark>"],
+        fields: {
+          title: { number_of_fragments: 0 },
+          description: { fragment_size: 160, number_of_fragments: 1 },
+        },
+      },
+    });
+  } catch (e) {
+    console.error(`Search failed: ${e.message || e.name}`);
+    throw new HttpError(503, "SEARCH_UNAVAILABLE", SEARCH_UNAVAILABLE_MESSAGE);
+  }
+
+  const results = [];
+  for (const hit of response.hits.hits) {
+    const document = /** @type {object} */ (hit._source);
+
+    let highlight = {};
+    if (hit.highlight) {
+      highlight = hit.highlight;
+    }
+
+    results.push({ _id: hit._id, ...document, highlight: highlight });
+  }
+
+  // track_total_hits makes total an object: { value, relation }
+  const totalHits = /** @type {import('@elastic/elasticsearch').estypes.SearchTotalHits} */ (response.hits.total);
+
+  return {
+    total: totalHits.value,
+    page: params.page,
+    size: params.size,
+    results: results,
+  };
 }

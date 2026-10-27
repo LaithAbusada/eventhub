@@ -4,10 +4,10 @@ import { Venue } from '../models/Venue.js';
 import { Registration } from '../models/Registration.js';
 import { validateBody, validateQuery } from '../middleware/validate.js';
 import { auth, requireRole } from '../middleware/auth.js';
-import { eventInput, eventEdit, listQuery, registrationInput } from '../schemas.js';
+import { eventInput, eventEdit, listQuery, searchQuery, registrationInput } from '../schemas.js';
 import { buildReturnShape, HttpError } from '../errors.js';
 import { registerForEvent, cancelRegistration } from '../services/registrations.js';
-import { indexEvent, removeEvent } from '../services/search.js';
+import { indexEvent, removeEvent, searchEvents } from '../services/search.js';
 
 export const eventRoutes = Router();
 
@@ -53,6 +53,12 @@ eventRoutes.get('/', validateQuery(listQuery), async (req, res) => {
   const [items, total] = await Promise.all([findThisPage, countAllUpcoming]);
 
   res.json({ items, total, page, size });
+});
+
+
+eventRoutes.get('/search', validateQuery(searchQuery), async (req, res) => {
+  const searchResults = await searchEvents(req.validQuery);
+  res.json(searchResults);
 });
 
 // One event, with its full venue and only its organizer's name

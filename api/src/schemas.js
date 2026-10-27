@@ -54,3 +54,17 @@ export const listQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
   size: z.coerce.number().int().min(1).max(50).default(12),
 });
+
+// Kept as text, not a Date: Elasticsearch reads YYYY-MM-DD directly
+const day = z.iso.date('Use the format YYYY-MM-DD');
+
+export const searchQuery = listQuery.extend({
+  q: z.string().trim().max(200).optional(),
+  city: z.string().trim().optional(),
+  category: category.optional(),
+  from: day.optional(),
+  to: day.optional(),
+  minPrice: z.coerce.number().min(0).optional(),
+  maxPrice: z.coerce.number().min(0).optional(),
+  sort: z.enum(['relevance', 'soonest', 'cheapest']).default('relevance'),
+});
