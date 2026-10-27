@@ -7,6 +7,7 @@ import { auth, requireRole } from '../middleware/auth.js';
 import { eventInput, eventEdit, listQuery, registrationInput } from '../schemas.js';
 import { buildReturnShape, HttpError } from '../errors.js';
 import { registerForEvent, cancelRegistration } from '../services/registrations.js';
+import { indexEvent, removeEvent } from '../services/search.js';
 
 export const eventRoutes = Router();
 
@@ -81,6 +82,10 @@ eventRoutes.post('/', auth, requireRole('organizer'), validateBody(eventInput), 
   const eventData = { ...req.body, organizer: req.user.sub };
   const event = await Event.create(eventData);
 
+  // Copy it into search. MongoDB is written first, because it's the source of truth;
+  // indexEvent never throws, so a search problem can't fail this request.
+  await indexEvent(event._id);
+
   res.status(201).json(event);
 });
 
@@ -102,6 +107,9 @@ eventRoutes.put('/:id', auth, validateBody(eventEdit), async (req, res) => {
   Object.assign(event, req.body);
   await event.save();
 
+  // Replace its search document with the edited version
+  await indexEvent(event._id);
+
   res.json(event);
 });
 
@@ -111,6 +119,9 @@ eventRoutes.delete('/:id', auth, async (req, res) => {
   // Delete its registrations first, so none are left pointing at a missing event
   await Registration.deleteMany({ event: event._id });
   await event.deleteOne();
+
+  // And from search, so a deleted event never shows up in results
+  await removeEvent(event._id);
 
   res.status(204).end();
 });
