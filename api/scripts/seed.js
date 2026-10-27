@@ -79,29 +79,48 @@ const [organizer, organizer2, attendee, attendee2] = await User.create([
 const venues = await Venue.create(VENUES);
 
 // One event every 2 days from the day after tomorrow; every third one belongs to the second organizer
-const events = await Event.create(
-  EVENTS.map((event, i) => ({
-    ...event,
-    venue: venues[event.venue]._id,
-    organizer: i % 3 === 2 ? organizer2._id : organizer._id,
+const eventsToCreate = [];
+for (let i = 0; i < EVENTS.length; i++) {
+  const event = EVENTS[i];
+
+  let eventOrganizer = organizer;
+  if (i % 3 === 2) {
+    eventOrganizer = organizer2;
+  }
+
+  eventsToCreate.push({
+    ...event, // title, description, categories, price
+    venue: venues[event.venue]._id, // replace the venue's position in VENUES with its real id
+    organizer: eventOrganizer._id,
     startsAt: daysFromNow(2 + i * 2, 17 + (i % 4)),
-  })),
-);
+  });
+}
+const events = await Event.create(eventsToCreate);
 
 // Adam registers for every third event, Aya for every fourth.
 // That gives the Tiny Room event (number 16) exactly one registration: one seat left.
 const registrations = [];
-events.forEach((event, i) => {
-  if (i % 3 === 0) registrations.push({ user: attendee._id, event: event._id, ticketCount: 1 + (i % 2) });
-  if (i % 4 === 0) registrations.push({ user: attendee2._id, event: event._id, ticketCount: 1 });
-});
+for (let i = 0; i < events.length; i++) {
+  const event = events[i];
+
+  if (i % 3 === 0) {
+    const ticketCount = 1 + (i % 2); // 1 or 2 tickets, alternating
+    registrations.push({ user: attendee._id, event: event._id, ticketCount: ticketCount });
+  }
+  if (i % 4 === 0) {
+    registrations.push({ user: attendee2._id, event: event._id, ticketCount: 1 });
+  }
+}
 await Registration.create(registrations);
 
-// Keep each event's seat counter in step with its registrations
+// Keep each event's seat counter in step with its registrations: add up their tickets
 for (const event of events) {
-  const seats = registrations
-    .filter((r) => r.event.equals(event._id))
-    .reduce((sum, r) => sum + r.ticketCount, 0);
+  let seats = 0;
+  for (const registration of registrations) {
+    if (registration.event.equals(event._id)) {
+      seats = seats + registration.ticketCount;
+    }
+  }
   await Event.updateOne({ _id: event._id }, { seatsTaken: seats });
 }
 

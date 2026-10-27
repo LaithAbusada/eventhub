@@ -13,7 +13,9 @@ venueRoutes.get('/', async (req, res) => {
 
 venueRoutes.delete('/:id', auth, requireRole('organizer'), async (req, res) => {
   const venue = await Venue.findById(req.params.id);
-  if (!venue) throw new HttpError(404, "NOT_FOUND", "Venue not found");
+  if (!venue) {
+    throw new HttpError(404, "NOT_FOUND", "Venue not found");
+  }
 
   // Both checks below use the { venue: 1, startsAt: 1 } index on events
   const hasUpcoming = await Event.exists({ venue: venue._id, startsAt: { $gte: new Date() } });

@@ -2,25 +2,50 @@
 // Run it with: node scripts/race.js <eventId>   (the API must be running)
 const API = 'http://localhost:4000/api';
 
-const eventId = process.argv[2]; // node scripts/race.js 6720f3... → '6720f3...'
+// node scripts/race.js 6720f3...  →  process.argv[2] is '6720f3...'
+const eventId = process.argv[2];
 if (!eventId) {
   console.log('Usage: node scripts/race.js <eventId>');
   process.exit(1);
 }
 
-// POST some JSON, optionally with a token; returns the status and the parsed body
+// Sends a POST with a JSON body, and the token if there is one.
+// Returns the status code and the parsed response body.
 async function post(path, body, token) {
   const headers = { 'Content-Type': 'application/json' };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(API + path, { method: 'POST', headers, body: JSON.stringify(body ?? {}) });
-  return { status: res.status, body: await res.json().catch(() => null) };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(API + path, {
+    method: 'POST',
+    headers: headers,
+    body: JSON.stringify(body),
+  });
+
+  let responseBody = null;
+  try {
+    responseBody = await response.json();
+  } catch {
+    // Some responses (like 204) have no JSON body
+  }
+
+  return { status: response.status, body: responseBody };
 }
 
-// A new attendee each run, with a unique email, so neither is registered yet
+// Registers a new attendee with a unique email, so they aren't registered for anything yet
 async function newAttendee(name) {
   const email = `${name}-${Date.now()}@race.test`;
-  const res = await post('/auth/register', { name, email, password: 'password123', role: 'attendee' });
-  return res.body.token;
+  const result = await post('/auth/register', { name: name, email: email, password: 'password123', role: 'attendee' });
+  return result.body.token;
+}
+
+// The error code from a response, or an empty string if there isn't one
+function errorCodeOf(result) {
+  if (result.body && result.body.error) {
+    return result.body.error.code;
+  }
+  return '';
 }
 
 const [tokenA, tokenB] = await Promise.all([newAttendee('racer-a'), newAttendee('racer-b')]);
@@ -31,8 +56,9 @@ const [a, b] = await Promise.all([
   post(`/events/${eventId}/register`, {}, tokenB),
 ]);
 
-console.log('Person A got', a.status, a.body?.error?.code ?? '');
-console.log('Person B got', b.status, b.body?.error?.code ?? '');
+console.log('Person A got', a.status, errorCodeOf(a));
+console.log('Person B got', b.status, errorCodeOf(b));
 
-const event = await (await fetch(`${API}/events/${eventId}`)).json();
+const eventResponse = await fetch(`${API}/events/${eventId}`);
+const event = await eventResponse.json();
 console.log(`Seats taken: ${event.seatsTaken} of ${event.venue.capacity}`);

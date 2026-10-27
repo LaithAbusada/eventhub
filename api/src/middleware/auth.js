@@ -2,49 +2,51 @@ import jwt from 'jsonwebtoken';
 import { config } from '../config.js';
 import { buildReturnShape } from '../errors.js';
 
-export const signToken = (user) => {
-
-    const token = jwt.sign({sub: user.id, role: user.role},config.jwtSecret,{expiresIn : config.jwtExpiresIn});
-
-
-    return token;
-
+// Creates a signed token that says who the user is and what role they have
+export function signToken(user) {
+  const payload = { sub: user.id, role: user.role };
+  const token = jwt.sign(payload, config.jwtSecret, { expiresIn: config.jwtExpiresIn });
+  return token;
 }
 
-export const auth =  (req,res,next) => {
+// 401 unless the request carries a valid token ("Authorization: Bearer <token>").
+// On success, req.user is the token's payload: { sub, role, iat, exp }.
+export function auth(req, res, next) {
+  const authorization = req.headers.authorization || '';
 
-    const authorization  =  req.headers.authorization || '';
-    const bearer = authorization.startsWith('Bearer ') ? authorization.slice("Bearer ".length) : null;
-    if (!authorization || !bearer) {
-        res.status(401).json(buildReturnShape("UNAUTHORIZED","Log in first"))
-        return;
-    }
+  let token = '';
+  if (authorization.startsWith('Bearer ')) {
+    token = authorization.slice('Bearer '.length);
+  }
 
-    try {
+  if (!token) {
+    res.status(401).json(buildReturnShape("UNAUTHORIZED", "Log in first"));
+    return;
+  }
 
+  try {
+    const payload = jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] });
+    req.user = payload;
+  } catch {
+    // Fake, edited or expired
+    res.status(401).json(buildReturnShape("UNAUTHORIZED", "Please log in again"));
+    return;
+  }
 
-        const userVerify = jwt.verify(
-            bearer,
-            config.jwtSecret,
-            { algorithms: ['HS256'] }
-        )
-
-        req.user = userVerify;
-
-        next();
-    } catch {
-        res.status(401).json(buildReturnShape("UNAUTHORIZED","Please log in again"))
-        return;
-    }
-
+  next();
 }
 
+// Takes a role and returns a middleware that answers 403 for anyone without it.
+// Use it after auth, which sets req.user.
+export function requireRole(role) {
+  return function (req, res, next) {
+    const user = req.user;
 
-
-export const requireRole = (role) => (req,res,next) => {
-    if (req?.user?.role != role) {
-        res.status(403).json(buildReturnShape("FORBIDDEN","Only organizers can do this"))
-    } else {
-        next();
+    if (!user || user.role !== role) {
+      res.status(403).json(buildReturnShape("FORBIDDEN", "Only organizers can do this"));
+      return;
     }
+
+    next();
+  };
 }

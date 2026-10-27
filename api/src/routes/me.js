@@ -51,9 +51,14 @@ meRoutes.get('/events', auth, requireRole('organizer'), async (req, res) => {
     // 6. Keep only what the dashboard shows, soonest first
     {
       $project: {
-        title: 1, startsAt: 1, price: 1, categories: 1,
+        title: 1,
+        startsAt: 1,
+        price: 1,
+        categories: 1,
         venue: { _id: 1, name: 1, city: 1, capacity: 1 },
-        registrationCount: 1, ticketsSold: 1, remainingSeats: 1,
+        registrationCount: 1,
+        ticketsSold: 1,
+        remainingSeats: 1,
       },
     },
     { $sort: { startsAt: 1 } },

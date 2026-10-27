@@ -13,34 +13,50 @@ export const eventRoutes = Router();
 // Returns the event, or throws 404 if it doesn't exist and 403 if it belongs to another organizer
 async function loadOwnedEvent(req) {
   const event = await Event.findById(req.params.id);
-  if (!event) throw new HttpError(404, "NOT_FOUND", "Event not found");
+
+  if (!event) {
+    throw new HttpError(404, "NOT_FOUND", "Event not found");
+  }
   if (!event.organizer.equals(req.user.sub)) {
     throw new HttpError(403, "FORBIDDEN", "You can only change your own events");
   }
+
   return event;
 }
 
 // Returns the venue, or throws 422 if the id points at nothing
 async function loadVenue(venueId) {
   const venue = await Venue.findById(venueId);
-  if (!venue) throw new HttpError(422, "VALIDATION_FAILED", "That venue does not exist");
+
+  if (!venue) {
+    throw new HttpError(422, "VALIDATION_FAILED", "That venue does not exist");
+  }
+
   return venue;
 }
 
+// Upcoming events, soonest first, one page at a time
+eventRoutes.get('/', validateQuery(listQuery), async (req, res) => {
+  const { page, size } = req.validQuery;
+  const upcoming = { startsAt: { $gte: new Date() } };
+  const skip = (page - 1) * size;
 
-eventRoutes.get('/',validateQuery(listQuery),async (req,res)=> {
-    const {page,size} = req.validQuery;
-    const filter = { startsAt: { $gte: new Date() } };
-   const [items,total] =  await Promise.all([Event.find(filter).sort({startsAt:1}).skip((page - 1) * size).limit(size).populate('venue','name city'),Event.countDocuments(filter)]);
+  const findThisPage = Event.find(upcoming)
+    .sort({ startsAt: 1 })
+    .skip(skip)
+    .limit(size)
+    .populate('venue', 'name city');
+  const countAllUpcoming = Event.countDocuments(upcoming);
 
-   res.json({items,total,page,size});
-})
+  // Run both queries at the same time, and wait for both
+  const [items, total] = await Promise.all([findThisPage, countAllUpcoming]);
 
+  res.json({ items, total, page, size });
+});
 
+// One event, with its full venue and only its organizer's name
 eventRoutes.get('/:id', async (req, res) => {
-  const { id } = req.params;
-
-  const event = await Event.findById(id)
+  const event = await Event.findById(req.params.id)
     .populate('venue')
     .populate('organizer', 'name');
 
@@ -49,34 +65,43 @@ eventRoutes.get('/:id', async (req, res) => {
     return;
   }
 
+  // populate() swapped the venue id for the venue document; the type checker can't see that, hence the cast
   const venue = /** @type {any} */ (event.venue);
   const seatsLeft = venue.capacity - event.seatsTaken;
 
-  res.json({ ...event.toJSON(), seatsLeft });
+  // The event's own fields at the top level, with seatsLeft added next to them
+  const response = { ...event.toJSON(), seatsLeft: seatsLeft };
+  res.json(response);
 });
 
 eventRoutes.post('/', auth, requireRole('organizer'), validateBody(eventInput), async (req, res) => {
   await loadVenue(req.body.venue);
 
-  // The organizer comes from the token, never from the request body
-  const event = await Event.create({ ...req.body, organizer: req.user.sub });
+  // Everything from the body, plus the organizer, which comes from the token, never from the body
+  const eventData = { ...req.body, organizer: req.user.sub };
+  const event = await Event.create(eventData);
+
   res.status(201).json(event);
 });
 
 eventRoutes.put('/:id', auth, validateBody(eventEdit), async (req, res) => {
   const event = await loadOwnedEvent(req);
 
-  if (req.body.venue && !event.venue.equals(req.body.venue)) {
-    const venue = await loadVenue(req.body.venue);
+  const venueIsChanging = req.body.venue && !event.venue.equals(req.body.venue);
+  if (venueIsChanging) {
+    const newVenue = await loadVenue(req.body.venue);
+
     // The new venue must still fit everyone who already has a seat
-    if (venue.capacity < event.seatsTaken) {
-      throw new HttpError(409, "VENUE_TOO_SMALL", `${event.seatsTaken} seats are already taken, but that venue only has ${venue.capacity}`);
+    if (newVenue.capacity < event.seatsTaken) {
+      const message = `${event.seatsTaken} seats are already taken, but that venue only has ${newVenue.capacity}`;
+      throw new HttpError(409, "VENUE_TOO_SMALL", message);
     }
   }
 
-  // Only the fields that were sent are changed
+  // Copy only the fields that were sent onto the event
   Object.assign(event, req.body);
   await event.save();
+
   res.json(event);
 });
 
@@ -86,6 +111,7 @@ eventRoutes.delete('/:id', auth, async (req, res) => {
   // Delete its registrations first, so none are left pointing at a missing event
   await Registration.deleteMany({ event: event._id });
   await event.deleteOne();
+
   res.status(204).end();
 });
 
@@ -102,8 +128,10 @@ eventRoutes.delete('/:id/register', auth, async (req, res) => {
 // Only the event's owner sees who is coming
 eventRoutes.get('/:id/attendees', auth, async (req, res) => {
   const event = await loadOwnedEvent(req);
+
   const attendees = await Registration.find({ event: event._id, status: 'confirmed' })
     .sort({ createdAt: 1 })
     .populate('user', 'name email');
+
   res.json(attendees);
 });
