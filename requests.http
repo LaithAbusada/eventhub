@@ -191,3 +191,44 @@ Authorization: Bearer {{org.response.body.$.token}}
 ### My events, as an attendee: expect 403
 GET {{api}}/me/events
 Authorization: Bearer {{att.response.body.$.token}}
+
+########## Search (send the logins above and "All venues" first)
+
+### A typo in a title word: expect highlight.title "<mark>Jazz</mark> Night in Weibdeh"
+GET {{api}}/events/search?q=jaz
+
+### City, lowercase: note the total
+GET {{api}}/events/search?city=amman
+
+### City, uppercase: same total
+GET {{api}}/events/search?city=AMMAN
+
+### A category, cheapest first: prices never go down
+GET {{api}}/events/search?category=music&sort=cheapest
+
+### An empty minPrice is ignored, not treated as 0
+GET {{api}}/events/search?minPrice=&maxPrice=20&sort=cheapest
+
+### A date range, soonest first: an event late on November 30 is still included
+GET {{api}}/events/search?from=2026-11-01&to=2026-11-30&sort=soonest
+
+### Page 2, 5 per page
+GET {{api}}/events/search?sort=soonest&page=2&size=5
+
+### Bad input: expect 400 BAD_QUERY with details for sort and from
+GET {{api}}/events/search?sort=random&from=30-11-2026
+
+### A title with HTML in it
+# @name xss
+POST {{api}}/events
+Authorization: Bearer {{org.response.body.$.token}}
+Content-Type: application/json
+
+{ "title": "Salsa <img src=x onerror=alert(1)> night", "startsAt": "2027-02-01T18:00:00Z", "price": 1, "venue": "{{venues.response.body.$[0]._id}}" }
+
+### Search for it: the organizer's tag comes back escaped, only <mark> is real HTML
+GET {{api}}/events/search?q=salsa
+
+### Clean up: delete it, and search forgets it too
+DELETE {{api}}/events/{{xss.response.body.$._id}}
+Authorization: Bearer {{org.response.body.$.token}}
