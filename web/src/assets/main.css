@@ -125,3 +125,13 @@ mark {
   gap: 1rem;
   margin-top: 1rem;
 }
+
+/* Event page */
+
+.description {
+  white-space: pre-line;
+}
+
+.seats {
+  font-weight: 600;
+}

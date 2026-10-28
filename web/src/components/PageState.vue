@@ -11,6 +11,11 @@ defineProps({
 <template>
   <p v-if="loading" class="page-state">Loading…</p>
   <p v-else-if="error" class="page-state error" role="alert">{{ error.message }}</p>
-  <p v-else-if="empty" class="page-state">{{ emptyText }}</p>
+  <template v-else-if="empty">
+    <!-- A page can pass its own empty message (with a link, say) as <template #empty> -->
+    <slot name="empty">
+      <p class="page-state">{{ emptyText }}</p>
+    </slot>
+  </template>
   <slot v-else />
 </template>
