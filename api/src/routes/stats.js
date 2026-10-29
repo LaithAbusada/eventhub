@@ -3,17 +3,14 @@ import { Registration } from '../models/Registration.js';
 
 export const statsRoutes = Router();
 
-// The top 5 venues by number of confirmed registrations
 statsRoutes.get('/top-venues', async (req, res) => {
   const venues = await Registration.aggregate([
-    // 1. Only confirmed registrations
     { $match: { status: 'confirmed' } },
 
-    // 2. Attach each registration's event (an array of one), then make it a plain object
+    // The event, as one object instead of an array of one
     { $lookup: { from: 'events', localField: 'event', foreignField: '_id', as: 'event' } },
     { $unwind: '$event' },
 
-    // 3. One group per venue: count the registrations and add up their tickets
     {
       $group: {
         _id: '$event.venue',
@@ -22,15 +19,13 @@ statsRoutes.get('/top-venues', async (req, res) => {
       },
     },
 
-    // 4. Biggest first (the _id breaks ties, so the order never changes between calls), keep 5
+    // _id breaks ties, so the order is always the same
     { $sort: { registrations: -1, _id: 1 } },
     { $limit: 5 },
 
-    // 5. Attach the venue's name and city
     { $lookup: { from: 'venues', localField: '_id', foreignField: '_id', as: 'venue' } },
     { $unwind: '$venue' },
 
-    // 6. Shape each result
     {
       $project: {
         _id: 0,

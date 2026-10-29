@@ -1,6 +1,3 @@
-// Reads every setting from environment variables, in one place
-
-// Returns the variable's value, or stops the API with a clear message if it's missing
 function mustHave(name) {
   const value = process.env[name];
   if (!value) {
@@ -9,8 +6,7 @@ function mustHave(name) {
   return value;
 }
 
-// How long a login token lasts, like '1d'. The cast tells the type checker this is a valid
-// jsonwebtoken duration (values from process.env are plain strings).
+// The cast is only for the type checker: env values are plain strings
 const jwtExpiresIn = /** @type {import('jsonwebtoken').SignOptions['expiresIn']} */ (
   process.env.JWT_EXPIRES_IN || '1d'
 );

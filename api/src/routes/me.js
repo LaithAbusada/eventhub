@@ -2,11 +2,10 @@ import { Router } from 'express';
 import mongoose from 'mongoose';
 import { Registration } from '../models/Registration.js';
 import { Event } from '../models/Event.js';
-import { auth, requireRole } from '../middleware/auth.js';
+import { auth, requireOrganizer } from '../middleware/auth.js';
 
 export const meRoutes = Router();
 
-// My confirmed registrations, newest first, each with its event and the event's venue
 meRoutes.get('/registrations', auth, async (req, res) => {
   const registrations = await Registration.find({ user: req.user.sub, status: 'confirmed' })
     .sort({ createdAt: -1 })
@@ -18,15 +17,13 @@ meRoutes.get('/registrations', auth, async (req, res) => {
   res.json(registrations);
 });
 
-// The organizer dashboard: each of my events with its registration count and remaining seats
-meRoutes.get('/events', auth, requireRole('organizer'), async (req, res) => {
-  // aggregate() does NOT turn id strings into ObjectIds the way find() does, so convert it here
+meRoutes.get('/events', auth, requireOrganizer, async (req, res) => {
+  // aggregate() doesn't convert id strings to ObjectIds the way find() does
   const organizerId = new mongoose.Types.ObjectId(req.user.sub);
 
   const events = await Event.aggregate([
-    // 1. Only my events
     { $match: { organizer: organizerId } },
-    // 2. Attach each event's confirmed registrations as an array (empty when there are none)
+    { $sort: { startsAt: 1 } },
     {
       $lookup: {
         from: 'registrations',
@@ -36,19 +33,15 @@ meRoutes.get('/events', auth, requireRole('organizer'), async (req, res) => {
         as: 'registrations',
       },
     },
-    // 3. Attach the venue (an array of one), then make it a plain object
+    // The venue, as one object instead of an array of one
     { $lookup: { from: 'venues', localField: 'venue', foreignField: '_id', as: 'venue' } },
     { $unwind: '$venue' },
-    // 4. Count people and tickets. $size of an empty array is 0, so events nobody registered for stay in.
     {
       $addFields: {
         registrationCount: { $size: '$registrations' },
-        ticketsSold: { $sum: '$registrations.ticketCount' },
+        seatsLeft: { $subtract: ['$venue.capacity', '$seatsTaken'] },
       },
     },
-    // 5. Seats left = capacity minus tickets sold
-    { $addFields: { remainingSeats: { $subtract: ['$venue.capacity', '$ticketsSold'] } } },
-    // 6. Keep only what the dashboard shows, soonest first
     {
       $project: {
         title: 1,
@@ -57,11 +50,9 @@ meRoutes.get('/events', auth, requireRole('organizer'), async (req, res) => {
         categories: 1,
         venue: { _id: 1, name: 1, city: 1, capacity: 1 },
         registrationCount: 1,
-        ticketsSold: 1,
-        remainingSeats: 1,
+        seatsLeft: 1,
       },
     },
-    { $sort: { startsAt: 1 } },
   ]);
   res.json(events);
 });

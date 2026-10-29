@@ -2,12 +2,17 @@
   "compilerOptions": {
     "checkJs": true,
     "strict": false,
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "maxNodeModuleJsDepth": 0,
     "skipLibCheck": true,
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext"
   },
-  "include": ["src", "scripts", "test"]
+  "include": [
+    "src",
+    "scripts"
+  ]
 }

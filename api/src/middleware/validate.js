@@ -1,6 +1,5 @@
 import { HttpError } from '../errors.js';
 
-// Turns Zod's issues into a list of { field, message } for the error response
 function toFieldErrors(zodError) {
   const details = [];
   for (const issue of zodError.issues) {
@@ -9,7 +8,7 @@ function toFieldErrors(zodError) {
   return details;
 }
 
-// Removes query values that are empty strings, so ?minPrice= counts as "not set"
+// So ?minPrice= means "not set" instead of 0
 function dropEmptyValues(query) {
   const cleaned = {};
   for (const [key, value] of Object.entries(query)) {
@@ -20,8 +19,6 @@ function dropEmptyValues(query) {
   return cleaned;
 }
 
-// Takes a Zod schema and returns a middleware that checks req.body against it.
-// On success, req.body is replaced with the cleaned data (trimmed, lowercased...).
 export function validateBody(schema) {
   return function (req, res, next) {
     // Express 5 leaves req.body undefined when a request has no body
@@ -38,8 +35,7 @@ export function validateBody(schema) {
   };
 }
 
-// Same for the query string. Express 5 won't let you replace req.query,
-// so the cleaned result goes on req.validQuery instead.
+// Express 5 doesn't allow replacing req.query, so the result goes on req.validQuery
 export function validateQuery(schema) {
   return function (req, res, next) {
     const query = dropEmptyValues(req.query);

@@ -6,11 +6,10 @@ const eventSchema = new mongoose.Schema(
     description: { type: String, default: '' },
     startsAt: { type: Date, required: true },
     price: { type: Number, required: true, min: 0 },
-    // References: these store the other document's _id, not a copy of it
     venue: { type: mongoose.Schema.ObjectId, ref: "Venue", required: true },
     organizer: { type: mongoose.Schema.ObjectId, ref: "User", required: true },
     categories: { type: [String], default: [] },
-    // Seats claimed so far. Kept on the event so one atomic update can check and claim seats.
+    // Kept here so one update can check for room and take seats
     seatsTaken: { type: Number, min: 0, default: 0 },
   },
   { timestamps: true },

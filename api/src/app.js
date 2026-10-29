@@ -9,7 +9,6 @@ import { statsRoutes } from './routes/stats.js';
 
 export const app = express();
 
-// Turns a JSON request body into req.body
 app.use(express.json());
 
 app.get('/api/health', (req, res) => {
@@ -22,8 +21,7 @@ app.use('/api/venues', venueRoutes);
 app.use('/api/me', meRoutes);
 app.use('/api/stats', statsRoutes);
 
-// After every route: nothing matched, so make a 404
 app.use(notFound);
 
-// Always last: turns every error into our JSON error shape
+// Must be last
 app.use(errorHandler);

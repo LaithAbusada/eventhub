@@ -1,20 +1,14 @@
-import { es, EVENTS_INDEX, eventsIndexDefinition, searchStatus } from "../db/elastic.js";
-import { HttpError } from "../errors.js";
-import { Event } from "../models/Event.js";
-// Not used by name, but populate('venue') needs Mongoose to know the Venue model.
-// Without this import, any script that calls rebuildIndex on its own crashes with MissingSchemaError.
-import "../models/Venue.js";
+import { setTimeout as sleep } from 'node:timers/promises';
+import { es, EVENTS_INDEX, eventsIndexDefinition } from '../db/elastic.js';
+import { HttpError } from '../errors.js';
+import { Event } from '../models/Event.js';
+// Not used by name, but populate('venue') needs the Venue model registered
+import '../models/Venue.js';
 
-// Waits the given number of milliseconds
-function sleep(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
+let searchReady = false;
 
-// What one event looks like inside Elasticsearch.
-// Expects an event loaded with .populate('venue', 'name city'): venue name and city come from the venue.
-export function toSearchDoc(event) {
+// Needs the event loaded with populate('venue', 'name city')
+function toSearchDoc(event) {
   return {
     title: event.title,
     description: event.description,
@@ -26,8 +20,6 @@ export function toSearchDoc(event) {
   };
 }
 
-// Deletes the events index and builds it again from MongoDB, the source of truth.
-// Returns how many events it indexed.
 export async function rebuildIndex() {
   // ignore 404: on the very first run there's no index to delete yet
   await es.indices.delete({ index: EVENTS_INDEX }, { ignore: [404] });
@@ -52,10 +44,8 @@ export async function rebuildIndex() {
   return events.length;
 }
 
-
-
 export async function startSearch() {
-  while (!searchStatus.ready) {
+  while (!searchReady) {
     try {
       const exists = await es.indices.exists({ index: EVENTS_INDEX });
       if (!exists) {
@@ -63,22 +53,20 @@ export async function startSearch() {
         console.log(`Created the events index with ${count} events`);
       }
 
-
-      searchStatus.ready = true;
-      console.log("Elasticsearch connected");
-    } catch (e) {
-      console.log(`Elasticsearch not ready: ${e.message || e.name}. Trying again in 5s`);
+      searchReady = true;
+      console.log('Elasticsearch connected');
+    } catch (err) {
+      console.log(`Elasticsearch not ready: ${err.message || err.name}. Trying again in 5s`);
       await sleep(5000);
     }
   }
 }
 
-// Copies one event into the search index, after it was created or edited.
-// Never throws: MongoDB already has the change, so a search problem must not fail the request.
-// If this fails, search is stale for that event until the reindex script runs.
+// Never throws: MongoDB already has the change. If this fails, search is out of date
+// for this event until the reindex script runs.
 export async function indexEvent(eventId) {
-  if (!searchStatus.ready) {
-    console.warn(`Warning, Elasticsearch is not ready yet, so event ${eventId} was not indexed. Run the reindex script later.`);
+  if (!searchReady) {
+    console.warn(`Search isn't ready: event ${eventId} was not indexed. Run the reindex script later.`);
     return;
   }
 
@@ -92,23 +80,22 @@ export async function indexEvent(eventId) {
     const document = toSearchDoc(event);
 
     await es.index({ index: EVENTS_INDEX, id: String(event._id), document: document });
-  } catch (e) {
-    console.error(`Could not index event ${eventId}: ${e.message || e.name}`);
+  } catch (err) {
+    console.error(`Could not index event ${eventId}: ${err.message || err.name}`);
   }
 }
 
-
 export async function removeEvent(eventId) {
-  if (!searchStatus.ready) {
-    console.warn(`Warning, Elasticsearch is not ready yet, so event ${eventId} stays in search until the next reindex.`);
+  if (!searchReady) {
+    console.warn(`Search isn't ready: event ${eventId} stays in search until the next reindex.`);
     return;
   }
 
   try {
-    // ignore 404: if the event was never indexed, there's nothing to delete, and that's fine
+    // ignore 404: nothing to delete if it was never indexed
     await es.delete({ index: EVENTS_INDEX, id: String(eventId) }, { ignore: [404] });
-  } catch (e) {
-    console.error(`Could not remove event ${eventId} from search: ${e.message || e.name}`);
+  } catch (err) {
+    console.error(`Could not remove event ${eventId} from search: ${err.message || err.name}`);
   }
 }
 
@@ -177,15 +164,22 @@ function buildSortOrder(sort) {
   return [{ _score: { order: "desc" } }, { startsAt: "asc" }];
 }
 
+// Elasticsearch refuses to page past its first 10,000 results
+const MAX_SEARCH_RESULTS = 10000;
+
 export async function searchEvents(params) {
-  if (!searchStatus.ready) {
+  const skip = (params.page - 1) * params.size;
+  if (skip + params.size > MAX_SEARCH_RESULTS) {
+    throw new HttpError(400, "BAD_QUERY", "Search can only page through the first 10,000 results");
+  }
+
+  if (!searchReady) {
     throw new HttpError(503, "SEARCH_UNAVAILABLE", SEARCH_UNAVAILABLE_MESSAGE);
   }
 
   const textQuery = buildTextQuery(params.q);
   const filters = buildFilters(params);
   const sortOrder = buildSortOrder(params.sort);
-  const skip = (params.page - 1) * params.size;
 
   let response;
   try {
@@ -212,8 +206,8 @@ export async function searchEvents(params) {
         },
       },
     });
-  } catch (e) {
-    console.error(`Search failed: ${e.message || e.name}`);
+  } catch (err) {
+    console.error(`Search failed: ${err.message || err.name}`);
     throw new HttpError(503, "SEARCH_UNAVAILABLE", SEARCH_UNAVAILABLE_MESSAGE);
   }
 
@@ -229,8 +223,10 @@ export async function searchEvents(params) {
     results.push({ _id: hit._id, ...document, highlight: highlight });
   }
 
-  // track_total_hits makes total an object: { value, relation }
-  const totalHits = /** @type {import('@elastic/elasticsearch').estypes.SearchTotalHits} */ (response.hits.total);
+  // Elasticsearch 8 always sends total as { value, relation }; the client's types also allow a number
+  const totalHits = /** @type {import('@elastic/elasticsearch').estypes.SearchTotalHits} */ (
+    response.hits.total
+  );
 
   return {
     total: totalHits.value,
