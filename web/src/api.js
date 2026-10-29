@@ -1,4 +1,3 @@
-// The auth store saves the token under this key; every request reads it from here
 export const TOKEN_KEY = 'token';
 
 export class ApiError extends Error {
@@ -47,7 +46,6 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
   const data = await readJson(response);
 
   if (!response.ok) {
-    // Our API answers errors as { error: { code, message, details } }
     let code = 'REQUEST_FAILED';
     let message = `Request failed with status ${response.status}`;
     let details = [];
@@ -60,14 +58,19 @@ export async function api(path, { method = 'GET', body, signal } = {}) {
       }
     }
 
+    // The token itself was rejected (expired or invalid). Forget it and reload: public pages
+    // come back as a guest, and the router guard sends protected pages to the login page.
+    if (response.status === 401 && token && code === 'UNAUTHORIZED') {
+      localStorage.removeItem(TOKEN_KEY);
+      window.location.reload();
+    }
+
     throw new ApiError(response.status, code, message, details);
   }
 
   return data;
 }
 
-// { field: message } from a validation error, to show each message under its input.
-// Any other error gives {}.
 export function fieldErrors(err) {
   const errors = {};
 

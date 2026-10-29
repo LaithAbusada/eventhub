@@ -14,7 +14,6 @@ export const useAuthStore = defineStore('auth', () => {
     return user.value !== null && user.value.role === 'organizer';
   });
 
-  // login and register both answer { token, user }
   function saveSession(session) {
     token.value = session.token;
     user.value = session.user;
@@ -48,7 +47,6 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = await api('/auth/me');
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        // The API rejected the token (expired, or the account is gone)
         logout();
       } else {
         // The API is down or broken: keep the token, the next init() tries again

@@ -12,10 +12,10 @@ const password = ref('');
 const errorMessage = ref('');
 const submitting = ref(false);
 
-// Only follow a redirect inside this app ("/dashboard"), never to another site ("//evil.example")
+// Only accept a path inside the app
 function pageAfterLogin() {
   const redirect = route.query.redirect;
-  if (typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')) {
+  if (typeof redirect === 'string' && redirect.startsWith('/')) {
     return redirect;
   }
   return '/';

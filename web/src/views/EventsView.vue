@@ -5,7 +5,6 @@ import { api } from '@/api';
 import { formatDate, formatPrice } from '@/format';
 import PageState from '@/components/PageState.vue';
 
-// The filters, in the order they appear in the URL
 const FILTER_FIELDS = ['q', 'city', 'category', 'from', 'to', 'minPrice', 'maxPrice', 'sort'];
 const DEFAULT_SORT = 'relevance';
 
@@ -71,6 +70,15 @@ function filtersFromUrl() {
   return filters;
 }
 
+function sameFilters(first, second) {
+  for (const field of FILTER_FIELDS) {
+    if (first[field] !== second[field]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function pageFromUrl() {
   const pageNumber = Number(route.query.page);
   if (Number.isInteger(pageNumber) && pageNumber >= 1) {
@@ -121,7 +129,7 @@ async function loadPlainListInstead(pageNumber, request) {
     page.value = data.page;
     size.value = data.size;
   } catch (err) {
-    if (err.name !== 'AbortError') {
+    if (!request.signal.aborted) {
       error.value = err;
     }
   }
@@ -149,7 +157,9 @@ async function loadResults() {
     page.value = data.page;
     size.value = data.size;
   } catch (err) {
-    if (err.name === 'AbortError') {
+    // A newer search cancelled this one. Checking the signal also covers a cancel that lands
+    // while the answer is still being read, which doesn't always throw an AbortError.
+    if (request.signal.aborted) {
       return;
     }
 
@@ -168,7 +178,7 @@ async function loadResults() {
   }
 }
 
-// The URL is the source of truth: on load, Back/Forward, a shared link or a filter change
+// Everything comes from the URL: on load, Back/Forward, a shared link or a filter change
 watch(
   () => route.query,
   () => {
@@ -190,7 +200,7 @@ function applyFormToUrl() {
   const filters = filtersFromForm();
 
   // The form already matches the URL (it was just filled from it, or Next was clicked): leave it
-  if (JSON.stringify(filters) === JSON.stringify(filtersFromUrl())) {
+  if (sameFilters(filters, filtersFromUrl())) {
     return;
   }
 
@@ -274,12 +284,12 @@ onBeforeUnmount(() => {
 
     <label>
       Min price (JOD)
-      <input v-model.number="form.minPrice" type="number" min="0" />
+      <input v-model="form.minPrice" type="number" min="0" />
     </label>
 
     <label>
       Max price (JOD)
-      <input v-model.number="form.maxPrice" type="number" min="0" />
+      <input v-model="form.maxPrice" type="number" min="0" />
     </label>
 
     <label>
@@ -296,23 +306,24 @@ onBeforeUnmount(() => {
     Search is down right now, so the filters are off. Showing all upcoming events instead.
   </p>
 
-  <PageState
-    :loading="loading"
-    :error="error"
-    :empty="results.length === 0"
-    empty-text="No events match these filters. Try removing one."
-  >
+  <PageState :loading="loading" :error="error" :empty="results.length === 0">
+    <template #empty>
+      <p class="page-state">No events match these filters. Try removing one.</p>
+    </template>
+
     <p class="total">{{ totalText }}</p>
 
     <ul class="results">
       <li v-for="event in results" :key="event._id">
         <RouterLink class="result-title" :to="{ name: 'event', params: { id: event._id } }">
-          <!-- v-html is safe here only because the API asked Elasticsearch to escape the text (encoder: 'html') -->
+          <!-- v-html is only safe because Elasticsearch escaped the text (encoder: 'html') -->
           <span v-if="event.highlight.title" v-html="event.highlight.title[0]"></span>
           <span v-else>{{ event.title }}</span>
         </RouterLink>
         <p class="meta">
-          {{ formatDate(event.startsAt) }} · {{ event.venueName }}, {{ event.city }} · {{ formatPrice(event.price) }}
+          {{ formatDate(event.startsAt) }} ·
+          {{ event.venueName }}, {{ event.city }} ·
+          {{ formatPrice(event.price) }}
         </p>
         <p v-if="event.highlight.description" class="snippet" v-html="event.highlight.description[0]"></p>
       </li>

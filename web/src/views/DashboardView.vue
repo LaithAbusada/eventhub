@@ -77,7 +77,7 @@ onMounted(loadEvents);
           <td>{{ formatDate(event.startsAt) }}</td>
           <td>{{ event.venue.name }}, {{ event.venue.city }}</td>
           <td>{{ event.registrationCount }}</td>
-          <td>{{ event.remainingSeats }} of {{ event.venue.capacity }}</td>
+          <td>{{ event.seatsLeft }} of {{ event.venue.capacity }}</td>
           <td class="actions">
             <RouterLink :to="{ name: 'event-edit', params: { id: event._id } }">Edit</RouterLink>
             <button type="button" @click="deleteEvent(event)">Delete</button>

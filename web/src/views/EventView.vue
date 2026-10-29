@@ -56,7 +56,6 @@ async function findMyRegistration(eventId) {
 async function fetchEventAndRegistration() {
   const eventId = route.params.id;
 
-  // Ask for both at the same time, and wait for both
   const eventRequest = api(`/events/${eventId}`);
   const registrationRequest = findMyRegistration(eventId);
   const [loadedEvent, registered] = await Promise.all([eventRequest, registrationRequest]);
@@ -137,7 +136,10 @@ watch(
         <button type="button" :disabled="buttonDisabled" @click="registerOrCancel">{{ buttonText }}</button>
         <p v-if="actionMessage" class="error" role="alert">{{ actionMessage }}</p>
       </div>
-      <RouterLink v-else :to="{ name: 'login', query: { redirect: route.fullPath } }">Log in to register</RouterLink>
+      <RouterLink
+        v-else
+        :to="{ name: 'login', query: { redirect: route.fullPath } }"
+      >Log in to register</RouterLink>
     </article>
   </PageState>
 </template>

@@ -5,7 +5,6 @@ import EventsView from '@/views/EventsView.vue';
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    // The first page loads with the app; the others are loaded when first visited
     { path: '/', name: 'events', component: EventsView },
     { path: '/events/:id', name: 'event', component: () => import('@/views/EventView.vue') },
     { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue') },
@@ -41,7 +40,7 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore();
 
-  // After a refresh the user is still loading. Without waiting, an organizer looks like a guest.
+  // After a refresh only the token is known: load the user first, or organizers get sent away
   await auth.init();
 
   if (to.meta.requiresAuth && !auth.isLoggedIn) {
