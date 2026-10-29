@@ -1,0 +1,9 @@
+{
+  "name": "eventhub",
+  "private": true,
+  "scripts": {
+    "dev": "node dev.mjs",
+    "seed": "npm run seed --prefix api",
+    "reindex": "npm run reindex --prefix api"
+  }
+}

@@ -1,16 +1,12 @@
-// Two brand-new people try to register for the same event at the same moment.
-// Run it with: node scripts/race.js <eventId>   (the API must be running)
+// Usage: node scripts/race.js <eventId>   (with the API running)
 const API = 'http://localhost:4000/api';
 
-// node scripts/race.js 6720f3...  →  process.argv[2] is '6720f3...'
 const eventId = process.argv[2];
 if (!eventId) {
   console.log('Usage: node scripts/race.js <eventId>');
   process.exit(1);
 }
 
-// Sends a POST with a JSON body, and the token if there is one.
-// Returns the status code and the parsed response body.
 async function post(path, body, token) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) {
@@ -23,24 +19,17 @@ async function post(path, body, token) {
     body: JSON.stringify(body),
   });
 
-  let responseBody = null;
-  try {
-    responseBody = await response.json();
-  } catch {
-    // Some responses (like 204) have no JSON body
-  }
-
+  const responseBody = await response.json();
   return { status: response.status, body: responseBody };
 }
 
-// Registers a new attendee with a unique email, so they aren't registered for anything yet
 async function newAttendee(name) {
   const email = `${name}-${Date.now()}@race.test`;
-  const result = await post('/auth/register', { name: name, email: email, password: 'password123', role: 'attendee' });
+  const account = { name: name, email: email, password: 'event123', role: 'attendee' };
+  const result = await post('/auth/register', account);
   return result.body.token;
 }
 
-// The error code from a response, or an empty string if there isn't one
 function errorCodeOf(result) {
   if (result.body && result.body.error) {
     return result.body.error.code;

@@ -1,5 +1,4 @@
-// Fills the database with sample data: test users, venues, events and registrations.
-// Run it with: npm run seed   (it wipes the database first)
+// Wipes the database, then adds sample data
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import { config } from '../src/config.js';
@@ -10,10 +9,9 @@ import { Registration } from '../src/models/Registration.js';
 import { es } from '../src/db/elastic.js';
 import { rebuildIndex } from '../src/services/search.js';
 
-const PASSWORD = 'password123';
+const PASSWORD = 'event123';
 const DAY = 24 * 60 * 60 * 1000;
 
-// A date some days from now, at a given hour (UTC)
 function daysFromNow(days, hour) {
   const date = new Date(Date.now() + days * DAY);
   date.setUTCHours(hour, 0, 0, 0);
@@ -21,18 +19,18 @@ function daysFromNow(days, hour) {
 }
 
 const VENUES = [
-  { name: 'Weibdeh Loft', city: 'Amman', address: 'Paris Circle, Jabal al-Weibdeh', capacity: 60 },
+  { name: 'Lweibdeh Loft', city: 'Amman', address: 'Paris Circle, Jabal Lweibdeh', capacity: 60 },
   { name: 'Abdali Hall', city: 'Amman', address: 'Abdali Boulevard', capacity: 400 },
   { name: 'Rainbow Street Rooftop', city: 'Amman', address: 'Rainbow Street, Jabal Amman', capacity: 120 },
   { name: 'Irbid Arts Centre', city: 'Irbid', address: 'University Street', capacity: 200 },
   { name: 'Aqaba Shore Stage', city: 'Aqaba', address: 'South Beach Road', capacity: 800 },
-  // Only 2 seats, to race two people for the last seat
+  // Only 2 seats, for testing a full event and the last-seat race
   { name: 'The Tiny Room', city: 'Amman', address: 'Lweibdeh, side street', capacity: 2 },
 ];
 
-// venue is the position of the venue in VENUES above; price is in JOD
+// venue is a position in VENUES above; prices are in JOD
 const EVENTS = [
-  { title: 'Jazz Night in Weibdeh', description: 'A late evening of live jazz standards with a local quartet.', categories: ['music'], price: 15, venue: 0 },
+  { title: 'Jazz Night in Lweibdeh', description: 'A late evening of live jazz standards with a local quartet.', categories: ['music'], price: 15, venue: 0 },
   { title: 'Intro to Node.js Workshop', description: 'Build your first Express API in three hours. Bring a laptop.', categories: ['tech', 'workshop'], price: 0, venue: 1 },
   { title: 'Amman Startup Pitch Night', description: 'Ten founders, five minutes each, one investor panel.', categories: ['business', 'tech'], price: 10, venue: 1 },
   { title: 'Rooftop Oud Session', description: 'Traditional oud music at sunset over Jabal Amman.', categories: ['music'], price: 20, venue: 2 },
@@ -80,7 +78,6 @@ const [organizer, organizer2, attendee, attendee2] = await User.create([
 
 const venues = await Venue.create(VENUES);
 
-// One event every 2 days from the day after tomorrow; every third one belongs to the second organizer
 const eventsToCreate = [];
 for (let i = 0; i < EVENTS.length; i++) {
   const event = EVENTS[i];
@@ -91,22 +88,22 @@ for (let i = 0; i < EVENTS.length; i++) {
   }
 
   eventsToCreate.push({
-    ...event, // title, description, categories, price
-    venue: venues[event.venue]._id, // replace the venue's position in VENUES with its real id
+    ...event,
+    venue: venues[event.venue]._id,
     organizer: eventOrganizer._id,
     startsAt: daysFromNow(2 + i * 2, 17 + (i % 4)),
   });
 }
 const events = await Event.create(eventsToCreate);
 
-// Adam registers for every third event, Aya for every fourth.
-// That gives the Tiny Room event (number 16) exactly one registration: one seat left.
+// Adam registers for every third event and Aya for every fourth,
+// which leaves the Tiny Room event with one seat
 const registrations = [];
 for (let i = 0; i < events.length; i++) {
   const event = events[i];
 
   if (i % 3 === 0) {
-    const ticketCount = 1 + (i % 2); // 1 or 2 tickets, alternating
+    const ticketCount = 1 + (i % 2);
     registrations.push({ user: attendee._id, event: event._id, ticketCount: ticketCount });
   }
   if (i % 4 === 0) {
@@ -115,7 +112,6 @@ for (let i = 0; i < events.length; i++) {
 }
 await Registration.create(registrations);
 
-// Keep each event's seat counter in step with its registrations: add up their tickets
 for (const event of events) {
   let seats = 0;
   for (const registration of registrations) {
@@ -129,12 +125,12 @@ for (const event of events) {
 console.log(`Created 4 users, ${venues.length} venues, ${events.length} events, ${registrations.length} registrations`);
 console.log(`Test logins: organizer@eventhub.test and attendee@eventhub.test, password ${PASSWORD}`);
 
-// Search gets the same fresh events. The seed still counts as done if Elasticsearch is down.
 try {
   const indexedCount = await rebuildIndex();
   console.log(`Search index rebuilt with ${indexedCount} events`);
-} catch (e) {
-  console.warn(`Could not rebuild the search index (${e.message || e.name}). Once Elasticsearch is up, run: npm run reindex`);
+} catch (err) {
+  const reason = err.message || err.name;
+  console.warn(`Could not rebuild the search index (${reason}). Once Elasticsearch is up, run: npm run reindex`);
 }
 
 await mongoose.disconnect();

@@ -1,47 +1,13 @@
-// Ctrl+Shift+B runs "EventHub: start everything": the databases, then the API and the web app,
-// each in its own VS Code terminal. Stop them with the trash-can icon on each terminal.
+// Ctrl+Shift+B runs npm run dev: the databases in Docker, then the API and the web app
 {
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "EventHub: databases",
-      "type": "shell",
-      "command": "docker compose up -d --wait",
-      "options": { "cwd": "${workspaceFolder}" },
-      "problemMatcher": []
-    },
-    {
-      // Plain node, no --watch: on Windows --watch sometimes restarts the API by itself (random 502s)
-      "label": "EventHub: API",
-      "type": "shell",
-      "command": "node --env-file-if-exists=../.env src/server.js",
-      "options": { "cwd": "${workspaceFolder}/api" },
-      "dependsOn": "EventHub: databases",
-      "isBackground": true,
-      "presentation": { "panel": "dedicated", "group": "eventhub" },
-      "problemMatcher": {
-        "owner": "eventhub-api",
-        "pattern": { "regexp": "^never-matches$" },
-        "background": { "activeBegins": true, "beginsPattern": "MongoDB", "endsPattern": "API listening on" }
-      }
-    },
-    {
-      "label": "EventHub: web",
+      "label": "EventHub: npm run dev",
       "type": "shell",
       "command": "npm run dev",
-      "options": { "cwd": "${workspaceFolder}/web" },
+      "options": { "cwd": "${workspaceFolder}" },
       "isBackground": true,
-      "presentation": { "panel": "dedicated", "group": "eventhub" },
-      "problemMatcher": {
-        "owner": "eventhub-web",
-        "pattern": { "regexp": "^never-matches$" },
-        "background": { "activeBegins": true, "beginsPattern": "vite", "endsPattern": "ready in" }
-      }
-    },
-    {
-      "label": "EventHub: start everything",
-      "dependsOn": ["EventHub: API", "EventHub: web"],
-      "dependsOrder": "parallel",
       "group": { "kind": "build", "isDefault": true },
       "problemMatcher": []
     }

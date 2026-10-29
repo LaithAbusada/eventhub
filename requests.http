@@ -4,13 +4,13 @@
 POST {{api}}/auth/register
 Content-Type: application/json
 
-{ "name": "Test Organizer", "email": "  Me@Example.TEST ", "password": "password123", "role": "organizer" }
+{ "name": "Test Organizer", "email": "  Me@Example.TEST ", "password": "event123", "role": "organizer" }
 
 ### Same email again: expect 409
 POST {{api}}/auth/register
 Content-Type: application/json
 
-{ "name": "Someone", "email": "me@example.test", "password": "password123", "role": "attendee" }
+{ "name": "Someone", "email": "me@example.test", "password": "event123", "role": "attendee" }
 
 ### Bad input: expect 422 with four details
 POST {{api}}/auth/register
@@ -29,7 +29,7 @@ Content-Type: application/json
 POST {{api}}/auth/login
 Content-Type: application/json
 
-{ "email": "me@example.test", "password": "password123" }
+{ "email": "me@example.test", "password": "event123" }
 
 ### Wrong password: expect 401
 POST {{api}}/auth/login
@@ -55,21 +55,21 @@ Authorization: Bearer abc
 POST {{api}}/auth/login
 Content-Type: application/json
 
-{ "email": "organizer@eventhub.test", "password": "password123" }
+{ "email": "organizer@eventhub.test", "password": "event123" }
 
 ### Log in as the second organizer
 # @name org2
 POST {{api}}/auth/login
 Content-Type: application/json
 
-{ "email": "organizer2@eventhub.test", "password": "password123" }
+{ "email": "organizer2@eventhub.test", "password": "event123" }
 
 ### Log in as an attendee
 # @name att
 POST {{api}}/auth/login
 Content-Type: application/json
 
-{ "email": "attendee@eventhub.test", "password": "password123" }
+{ "email": "attendee@eventhub.test", "password": "event123" }
 
 ### Upcoming events, page 2, 5 per page
 # @name list
@@ -194,7 +194,7 @@ Authorization: Bearer {{att.response.body.$.token}}
 
 ########## Search (send the logins above and "All venues" first)
 
-### A typo in a title word: expect highlight.title "<mark>Jazz</mark> Night in Weibdeh"
+### A typo in a title word: expect highlight.title "<mark>Jazz</mark> Night in Lweibdeh"
 GET {{api}}/events/search?q=jaz
 
 ### City, lowercase: note the total
