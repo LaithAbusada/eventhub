@@ -115,7 +115,7 @@ Invalid input also has `details`, a list of `{ field, message }`.
 
 ## Checking the last-seat race
 
-There are no automated tests. `api/scripts/race.js` checks the race by hand: it creates two new attendees and registers both at the same moment for one event. With the app running and Node.js installed:
+ `api/scripts/race.js` checks the race: it creates two new attendees and registers both at the same moment for one event. With the app running and Node.js installed:
 
 ```bash
 cd api
